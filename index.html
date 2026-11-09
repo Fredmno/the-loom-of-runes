@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>The Loom of Runes</title>
+  <style>
+    :root {
+      --bg: #120F1D;
+      --card: #1B162B;
+      --accent: #8B5CF6;
+      --accent-glow: rgba(139, 92, 246, 0.35);
+      --text: #F8F7FC;
+      --text-muted: #9CA3AF;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    header { text-align: center; margin-bottom: 16px; }
+    h1 { font-size: 1.25rem; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; }
+    .counter { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    
+    /* Altar */
+    .altar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: var(--card);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 16px;
+      padding: 20px;
+      width: 100%;
+      margin-bottom: 20px;
+      box-shadow: 0 8px 24px -4px rgba(0,0,0,0.4);
+    }
+    .slot {
+      width: 64px;
+      height: 64px;
+      border: 2px dashed rgba(139, 92, 246, 0.4);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      background: rgba(18, 15, 29, 0.5);
+      transition: all 0.2s ease;
+    }
+    .slot.active { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+    .fuse-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .fuse-btn:active { transform: scale(0.95); }
+    
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      width: 100%;
+      overflow-y: auto;
+      max-height: 55vh;
+      padding-bottom: 20px;
+    }
+    .rune {
+      background: var(--card);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 12px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .rune:active { transform: scale(0.92); }
+    .rune.selected { border-color: var(--accent); background: rgba(139, 92, 246, 0.15); }
+    .rune-icon { font-size: 1.6rem; }
+    .rune-name { font-size: 0.75rem; color: var(--text); font-weight: 500; }
+    
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.25s ease;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>The Loom of Runes</h1>
+    <div class="counter" id="counter">Discovered: 6 / 16</div>
+  </header>
+
+  <div class="altar">
+    <div class="slot" id="slotA">?</div>
+    <span style="color:var(--text-muted)">+</span>
+    <div class="slot" id="slotB">?</div>
+    <button class="fuse-btn" id="fuseBtn">Transmute</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="toast" id="toast">Discovered New Rune!</div>
+
+  <script>
+    const RECIPES = {
+      "Light+Shadow": { name: "Eclipse", icon: "🌘" },
+      "Fire+Water": { name: "Steam", icon: "♨️" },
+      "Earth+Water": { name: "Mud", icon: "🪵" },
+      "Fire+Earth": { name: "Lava", icon: "🌋" },
+      "Mind+Heart": { name: "Intuition", icon: "👁️" },
+      "Shadow+Heart": { name: "Curse", icon: "🔮" },
+      "Light+Mind": { name: "Truth", icon: "✨" },
+      "Lava+Water": { name: "Obsidian", icon: "💎" },
+      "Intuition+Truth": { name: "Enlightenment", icon: "🌟" },
+      "Eclipse+Curse": { name: "Void", icon: "🕳️" }
+    };
+
+    let discovered = [
+      { name: "Light", icon: "☀️" },
+      { name: "Shadow", icon: "🌑" },
+      { name: "Fire", icon: "🔥" },
+      { name: "Water", icon: "💧" },
+      { name: "Earth", icon: "🌱" },
+      { name: "Heart", icon: "❤️" },
+      { name: "Mind", icon: "🧠" }
+    ];
+
+    let selected = [];
+
+    const grid = document.getElementById("grid");
+    const slotA = document.getElementById("slotA");
+    const slotB = document.getElementById("slotB");
+    const fuseBtn = document.getElementById("fuseBtn");
+    const counter = document.getElementById("counter");
+    const toast = document.getElementById("toast");
+
+    function render() {
+      grid.innerHTML = "";
+      discovered.forEach((r, idx) => {
+        const el = document.createElement("div");
+        el.className = `rune ${selected.includes(r.name) ? 'selected' : ''}`;
+        el.innerHTML = `<span class="rune-icon">${r.icon}</span><span class="rune-name">${r.name}</span>`;
+        el.onclick = () => toggleSelect(r.name);
+        grid.appendChild(el);
+      });
+      counter.innerText = `Discovered: ${discovered.length} / ${discovered.length + Object.keys(RECIPES).length}`;
+    }
+
+    function toggleSelect(name) {
+      if (selected.includes(name)) {
+        selected = selected.filter(x => x !== name);
+      } else {
+        if (selected.length >= 2) selected.shift();
+        selected.push(name);
+      }
+      slotA.innerText = selected[0] ? getIcon(selected[0]) : "?";
+      slotB.innerText = selected[1] ? getIcon(selected[1]) : "?";
+      render();
+    }
+
+    function getIcon(name) {
+      const found = discovered.find(x => x.name === name);
+      return found ? found.icon : "?";
+    }
+
+    function showToast(msg) {
+      toast.innerText = msg;
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 1800);
+    }
+
+    fuseBtn.onclick = () => {
+      if (selected.length !== 2) return showToast("Pick two runes first!");
+      const key1 = `${selected[0]}+${selected[1]}`;
+      const key2 = `${selected[1]}+${selected[0]}`;
+      const res = RECIPES[key1] || RECIPES[key2];
+
+      if (res && !discovered.some(x => x.name === res.name)) {
+        discovered.push(res);
+        delete RECIPES[key1];
+        delete RECIPES[key2];
+        showToast(`Unlocked: ${res.name} ${res.icon}!`);
+        selected = [];
+        slotA.innerText = "?";
+        slotB.innerText = "?";
+        render();
+      } else if (res) {
+        showToast("Already discovered!");
+      } else {
+        showToast("The elements resist fusing...");
+      }
+    };
+
+    render();
+  </script>
+</body>
+</html>
